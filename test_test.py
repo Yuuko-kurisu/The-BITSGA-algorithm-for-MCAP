@@ -57,5 +57,6 @@ for i in range(len(region)):
 plt.show()
 #%%
 import numpy as np
-a = [0,0]
-[2] * 3
+a = np.arange(2,5)
+for i in a:
+    print(i)

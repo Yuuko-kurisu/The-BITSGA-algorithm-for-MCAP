@@ -921,7 +921,10 @@ class Case():
 
         self.Pnums = Pnums
     def getcase(self,name,type,seed):
-        pattern,k,position,condition = name.split('_')
+        try:
+            pattern,k,position,condition = name.split('_')
+        except:
+            print('yes')
         pattern = pattern.upper()
         k = int(k)
         positionnum = int(position)

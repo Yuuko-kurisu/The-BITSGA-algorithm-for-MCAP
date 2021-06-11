@@ -14,8 +14,8 @@ import math
 import copy
 import time
 import os
-import heartrate
-heartrate.trace(browser=True)
+# import heartrate
+# heartrate.trace(browser=True)
 #%% select system
 pattern = ['g','f']
 nk = [[2,7],[2,8],[3,7],[3,8],[4,20],[5,20],[10,20],[12,30],[15,30],[20,30],[22,40],[25,40],[30,40],[32,50],[35,50],[40,50]]
@@ -28,16 +28,17 @@ for p in pattern:
             namelist.append(p + '_' + str(n[0]) + '_' + str(n[1]) + '_' + c)
 print(namelist)
 name = namelist[0]
+name = ['f_3_7_less','g_3_7_less','f_4_9_less'][2]
 #%%
 ssr_list = []
-Seednum = 1
-seed_range = np.arange(Seednum)
+Seednum = 10
+seed_range = np.arange(2,Seednum+1)
 df = pd.DataFrame(index=seed_range,
-                  columns= pd.MultiIndex.from_product([['low','high','arbitrary'],['ssr','sys','design','max_sys','best_design','min_sys','worst_design','processtime','enumerationprotime']])
+                  columns= pd.MultiIndex.from_product([['low','high','arbitrary'],['ssr','sys','design','max_sys','best_design','min_sys','worst_design','time1','time2']])
                   )
 for type in range(1, 3 + 1):
     typename_dict = {1:'low',2:'high',3:'arbitrary'}
-    for seed in range(len(seed_range)):
+    for seed in seed_range:
         common_obj = Common()
         case_obj = Case()
         k,pattern,plist,region,positionnum,pnums,problem_type = case_obj.getcase(name,type,seed)
@@ -67,3 +68,8 @@ for type in range(1, 3 + 1):
         df.loc[seed,(typename,slice(None))] = record
 
 print('name:{},SSR:{}'.format(name,np.mean(ssr_list)))
+#%% process dataframe
+df = df.loc[:,(slice(None),['ssr','time1','time2'])]
+print(df)
+df = df.mean(axis=0)
+print(df)
