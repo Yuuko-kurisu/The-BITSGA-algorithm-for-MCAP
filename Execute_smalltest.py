@@ -3,43 +3,69 @@
 '''
 #%% 导入包
 import numpy as np
-from codehub_mcapplus import Common,Project
-#%%
-def small_system_p1(type,seed):
-    '''
-    给定系统的基本信息，如位置，组件
-    :return:
-    '''
-    k = 3
-    pattern = 'G'
-    positionnum = 7
-    pnums = np.array([2,3,2])
-    np.random.seed(seed)
-    p1 = np.random.random(pnums[0])
-    p2 = np.random.random(pnums[1])
-    p3 = np.random.random(pnums[2])
-    p_before = np.concatenate((p1,p2,p3),axis=None)
-    if type == 1:
-        p = (p_before * 19 + 80) / 100
-    elif type == 2:
-        p = (p_before * 19 + 1) / 100
-    else:
-        p = (p_before * 98 +1) / 100
-    region = np.array([np.array([1, 2, 3, 4]), np.array([2, 3, 4, 5, 6]), np.array([6, 7])])
-    return k,pattern,p,region,positionnum,pnums
-#%%
-common_obj = Common()
-k,pattern,plist,region,positionnum,pnums = small_system_p1(2,42)
-region_dict,position_dict = common_obj.get_regiondict(region_2D=region)
-component_type_dict,component_index_dict = common_obj.get_componentdict(pnums)
-project_obj = Project(region_dict,position_dict,component_index_dict,component_type_dict,plist,pattern,k)
-#%% 测试design
-design = np.array([1,2,3,4,5,7,6])
-result = project_obj.is_design_true_p1(design)
-print(result)
-relia = project_obj.transfer_design(design)
-sys = project_obj.system_reliability(relia)
+from codehub_mcapplus import Common,Project,Case
+import time
 
 
 
-#%%
+#@profile
+def main():
+    name_list = ['g_3_8_less','f_3_8_less','g_3_9_less','g_3_10_less']
+    #%%
+    name = name_list[3]
+    seed = 0
+    type = 1
+    
+    common_obj = Common()
+    case_obj = Case()
+    k, pattern, plist, region, positionnum, pnums, problem_type = case_obj.getcase(name, type, seed)
+    region_dict, position_dict, position_type_dict, position_index_dict = common_obj.get_regiondict(region_2D=region)
+    component_type_dict, component_index_dict = common_obj.get_componentdict(pnums)
+    project_obj = Project(region_dict, position_dict, position_type_dict, position_index_dict, component_index_dict,
+                          component_type_dict, plist, pattern, k, pnums, seed)
+    #%% 测试initial design
+    # ini = project_obj.initial_design()
+    #%% 测试design
+    # design = np.array([1,2,3,4,5,7,6])
+    # result = project_obj.is_design_true_p1(design)
+    # print(result)
+    # relia = project_obj.transfer_design(design)
+    # sys = project_obj.system_reliability(relia)
+    # print(sys)
+    #%% 测试zk算法
+    # design = project_obj.zk()
+    # print(design)
+    # result = project_obj.is_design_true_p1(design)
+    # print(result)
+    # relia = project_obj.transfer_design(design)
+    # sys = project_obj.system_reliability(relia)
+    # print(sys)
+    #%%
+    # design = project_obj.lk_p1(design)
+    # print(design)
+    # result = project_obj.is_design_true_p1(design)
+    # print(result)
+    # relia = project_obj.transfer_design(design)
+    # sys = project_obj.system_reliability(relia)
+    # print(sys)
+    #%% 测试BIACO
+    start = time.process_time()
+    design,sys,iter = project_obj.BIACO()
+    end = time.process_time()
+    print('biacotime:{}'.format(end-start))
+    print('sys:{}'.format(sys))
+    print('iter:{}'.format(iter))
+    #%% test enumeration
+    start = time.process_time()
+    (best_design,best_sys),(worst_design,worst_sys) = project_obj.enumeration()
+    end = time.process_time()
+    print('time:{}'.format(end-start))
+    print('best design:{},best sys:{}'.format(best_design,best_sys))
+    print('worst design:{},worst sys:{}'.format(worst_design,worst_sys))
+    #%%
+    SSR = (sys - worst_sys) / (best_sys - worst_sys)
+    print('SSR:{}'.format(SSR))
+    print(name)
+    #%% 测试random算法
+    # design_pop, method_time = project_obj.random_method()
+main()
