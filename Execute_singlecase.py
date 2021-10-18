@@ -23,16 +23,16 @@ condition = ['less','more']
 namelist = []
 for p in pattern:
     for n in nk:
-        time.sleep(0.5)
         for c in condition:
             namelist.append(p + '_' + str(n[0]) + '_' + str(n[1]) + '_' + c)
 print(namelist)
 name = namelist[0]
-name = ['f_3_7_less','g_3_7_less','f_4_9_less'][2]
+name = ['g_3_8_more','f_3_7_less','f_3_7_more','g_3_7_less','f_4_9_less','f_4_15_less'][1]
 #%%
 ssr_list = []
-Seednum = 10
-seed_range = np.arange(2,Seednum+1)
+Seednum = 50
+bias = 19
+seed_range = np.arange(bias,Seednum+bias)
 df = pd.DataFrame(index=seed_range,
                   columns= pd.MultiIndex.from_product([['low','high','arbitrary'],['ssr','sys','design','max_sys','best_design','min_sys','worst_design','time1','time2']])
                   )
@@ -47,13 +47,14 @@ for type in range(1, 3 + 1):
         project_obj = Project(region_dict,position_dict,position_type_dict,position_index_dict,component_index_dict,component_type_dict,plist,pattern,k,pnums,seed)
         #%%
         start_processtime = time.process_time()
-        design,sys,iter = project_obj.BIACO()
+        design,sys,iter = project_obj.BIACO(problem_type)
         end_processtime = time.process_time()
         biaco_processtime = end_processtime - start_processtime
         # print('sys:{}'.format(sys))
+        print('type:{},iter:{}'.format(type,iter))
         #%% test enumeration
         start_enumerationprotime = time.process_time()
-        (best_design,best_sys),(worst_design,worst_sys) = project_obj.enumeration()
+        (best_design,best_sys),(worst_design,worst_sys) = project_obj.enumeration(problem_type)
         end_enumerationprotime = time.process_time()
         enumeration_protime = end_enumerationprotime - start_enumerationprotime
         # print('best design:{},best sys:{}'.format(best_design,best_sys))

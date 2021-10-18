@@ -11,6 +11,7 @@ import math
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
+import os
 #%%
 class Common():
     def main(self):
@@ -99,6 +100,7 @@ class Common():
                                 pnums_list.append([a,b,c])
         return pnums_list
 class Project():
+    #@profile
     def __init__(self,region_dict,position_dict,position_type_dict,position_index_dict,component_index_dict,component_type_dict,plist,pattern,k,pnums,seed):
         self.region_dict = region_dict #区域字典：输入组件类型返回位置列表
         self.position_dict = position_dict#位置字典，输入位置返回类型列表
@@ -110,16 +112,44 @@ class Project():
         self.pattern = pattern
         self.k = k
         self.typenum = len(region_dict)
-        self.positionnum = region_dict[self.typenum][-1]
+        self.positionnum = int(region_dict[self.typenum][-1])
         self.pnums = pnums
         self.seed = seed
         #c++
-        dll = cdll.LoadLibrary('D:\\users\\yukko\\Documents\\Visual Studio 2015\\Projects\\Win32Project2\\x64\\Debug\\Win32Project2.dll')
+        localpath = os.getcwd()
+        path = localpath + '//Win32Project2.dll'
+        dll = cdll.LoadLibrary(path)
+        # dll = cdll.LoadLibrary('D:\\users\\yukko\\Documents\\Visual Studio 2015\\Projects\\Win32Project2\\x64\\Debug\\Win32Project2.dll')
         sysfun = dll.system_reliability
         sysfun.argtype = [c_int, c_int, c_int, POINTER(c_double)]
         sysfun.restype = c_double
         self.sysfun = sysfun
+        self.is_design_true_dict = self.get_is_design_true_dict()
     #@profile
+    def get_is_design_true_dict(self):
+        position_dict = self.position_dict
+        is_design_true_dict = defaultdict(int)
+        pdict = list(position_dict.values())
+        true_design_type = itertools.product(*pdict)
+        for i in true_design_type:
+            is_design_true_dict[i] = 1
+        return is_design_true_dict
+    #@profile
+    def is_design_true_final(self,design,design_type,designtype=True):
+        '''
+        输入design判断分配方案是否可行
+        designtype : 是否为可行解，如果为false说明是占位解（initial design）
+        :return:bool
+        '''
+        if len(design) != len(set(design)):
+            if designtype == True:
+                return False
+        component_type_dict = self.component_type_dict
+        is_design_true_dict = self.is_design_true_dict
+        position_dict = self.position_dict
+        # design_type = tuple([component_type_dict[component] for component in design])
+        boolindex = is_design_true_dict[design_type]
+        return bool(boolindex)
     def is_design_true(self,design,designtype=True):
         '''
         输入design判断分配方案是否可行
@@ -148,7 +178,7 @@ class Project():
         try:
             a = plist[design - 1]
         except:
-            print('error')
+            print('error1')
         return plist[design-1]
     def system_reliability(self, reliability_list):
         n = len(reliability_list)
@@ -158,7 +188,8 @@ class Project():
         return sys
     #@profile
     def bi_fun(self, reliability_list):
-        BI = []
+        length = len(reliability_list)
+        BI = np.zeros(length)
         k = self.k
         pattern = self.pattern
         length = len(reliability_list)
@@ -167,8 +198,8 @@ class Project():
             new_reliability_list = reliability_list.copy()
             new_reliability_list[i] = reliability_list[i] + delta
             bi_i = (self.system_reliability(new_reliability_list) - self.system_reliability(reliability_list)) / delta
-            BI.append(bi_i)
-        return np.array(BI)
+            BI[i] = bi_i
+        return BI
     def initial_design(self,problem_type=1,funtype='largest'):
         '''
         初始化一个可行解,为了节省算力还是区分两个问题
@@ -237,7 +268,7 @@ class Project():
                 try:
                     bi_list_available = bi_list[np.array(position_available)-1]
                 except:
-                    print('error')
+                    print('error2')
                 #找到该类型中BI值最大的位置
                 position_select = position_available[np.argmax(bi_list_available)]
                 #找到该位置上目前分配的组件和类型
@@ -627,6 +658,40 @@ class Project():
                                 break
                     if bi_index == 0:#结束
                         return design
+    def BITA(self,problem_type = 1, type = 1):
+        '''
+        bita,试试各种组合,if type is all,test 4 condition and print the best combination
+        else, type is index from 1 - 4
+        :param problem_type:
+        :param funtype:
+        :return:
+        '''
+        funtype_list = [['largest','largest'],['largest','smallest'],['smallest','largest'],['smallest','smallest']]
+        if type == 'all':
+            design_list = []
+            sys_list = []
+            for type_index in range(1,4+1):
+                funtype = funtype_list[type_index - 1]
+                mid_design = self.zk(problem_type, funtype[0])
+                if problem_type == 1:
+                    design = self.lk_p1(mid_design, funtype[1])
+                else:
+                    design = self.lk_p2(mid_design, funtype[1])
+                sys = self.system_reliability(self.transfer_design(design))
+                design_list.append(design)
+                sys_list.append(sys)
+                best_index = np.argmax(np.array(sys_list))
+                return design_list[best_index],sys_list[best_index],best_index,funtype_list[best_index]
+        else:
+            funtype = funtype_list[type-1]
+            mid_design = self.zk(problem_type,funtype[0])
+            if problem_type == 1:
+                design = self.lk_p1(mid_design,funtype[1])
+            else:
+                design = self.lk_p2(mid_design, funtype[1])
+            sys = self.system_reliability(self.transfer_design(design))
+            return design,sys
+
     #@profile
     def BIACO(self,problem_type = 1):
         '''
@@ -645,15 +710,26 @@ class Project():
         step 1 初始化操作
         '''
         # basic parameter
-        ant_num = 20
-        city_num = len(plist)  # 步数即城市数量
-        max_iteration = 100
-        max_nochange_iteration = 10
-        pheromone_elism_factor = 1 # 精英蚂蚁的额外权重（更新信息素）
-        Q = 10  # 计算信息素时的正常数
-        alpha, beta = 1, 1  # 因子
-        rho = 0.8  # 信息素挥发系数
-        initial_pheromone = 2
+        if problem_type == 1:
+            ant_num = 20
+            city_num = len(plist)  # 步数即城市数量
+            max_iteration = 100
+            max_nochange_iteration = 10
+            pheromone_elism_factor = 1 # 精英蚂蚁的额外权重（更新信息素）
+            Q = 10  # 计算信息素时的正常数
+            alpha, beta = 1, 1  # 因子
+            rho = 0.8  # 信息素挥发系数
+            initial_pheromone = 2
+        else:
+            ant_num = 20
+            city_num = len(plist)  # 步数即城市数量
+            max_iteration = 100
+            max_nochange_iteration = 30
+            pheromone_elism_factor = 1 # 精英蚂蚁的额外权重（更新信息素）
+            Q = 10  # 计算信息素时的正常数
+            alpha, beta = 1, 1  # 因子
+            rho = 0.8  # 信息素挥发系数
+            initial_pheromone = 2
         # 初始化信息素表  初始化n个初始路径，据此更新信息素表
         Pheromones = np.zeros((city_num, city_num))
         design_dict = defaultdict(list)
@@ -681,6 +757,10 @@ class Project():
         best_design_final = []
         best_sys_final = 0
         nochange_iteration = 0
+
+        # max and mean sys of all iters
+        max_sys_forplot = []
+        mean_sys_forplot = []
         while iter < max_iteration:
             Pheromones_delta = np.zeros((city_num, city_num))
             best_design = []
@@ -702,9 +782,14 @@ class Project():
                 point = start
                 tabu_k.remove(point)  # update tabu
                 design_thistype.append(point)
-                pre_design_thistype.remove(point)
+                num_remainpoint = len(pre_design_thistype)
+                num_remainpoint = num_remainpoint -1
+                # try:
+                #     pre_design_thistype.remove(point)
+                # except:
+                #     print('error')
                 # 计算转移概率
-                for position_index in range(1,len(pre_design_thistype)+1):
+                for position_index in range(1,num_remainpoint+1):
                     # bi 为下一个位置的bi值，此时design可按初始design来，也可以按动态design
                     bi_static = bi_list_static[position_index] # 该位置的静态bi值
 
@@ -715,7 +800,10 @@ class Project():
                     tabu_k.remove(point)  # update tabu
                     design_thistype.append(point)
                 # calculate the pheromone of ant k
-                pre_design[pre_design_thistype_index] = np.array(design_thistype) # 还原design
+                try:
+                    pre_design[pre_design_thistype_index] = np.array(design_thistype) # 还原design
+                except:
+                    print('error3')
                 design = copy.copy(pre_design)
                 '''
                 lk算法进行再优化
@@ -759,6 +847,21 @@ class Project():
                 break
             # clear
             iter = iter + 1
+
+            '''
+            plot aco trend for test
+            '''
+            max_sys_forplot.append(np.max(sys_list))
+            mean_sys_forplot.append(np.mean(sys_list))
+        # print('test:{}'.format(max_sys_forplot))
+        # fig = plt.figure(figsize=(6, 4))
+        # ax = fig.add_subplot(111)
+        # plt.plot(np.array(max_sys_forplot))
+        # plt.plot(np.array(mean_sys_forplot))
+        # plt.legend(['max_sys','mean_sys'])
+        # plt.show()
+
+
         return best_design_final, best_sys_final,iter
 
     def update_pheromones(self,design, weights):
@@ -769,10 +872,13 @@ class Project():
         :return:
         '''
         city_num = len(self.plist)
+        design_length = len(design)
         Pheromones = np.zeros((city_num, city_num))
-        for index in range(1, city_num):
+        for index in range(1, design_length):
             start = design[index - 1]
+
             end = design[index]
+
             Pheromones[start - 1][end - 1] = weights
         return Pheromones
 
@@ -808,25 +914,68 @@ class Project():
             length = len(self.plist)
             cases = itertools.permutations(np.arange(1, length + 1), length)
         else:
-            position_length = len(self.positionnum)
+            position_length = self.positionnum
             component_length = len(self.plist)
             cases = itertools.permutations(np.arange(1, component_length + 1), position_length)
         design = np.array([])
         sys_list = np.array([])
         for case in cases:
-            design_k = np.array(case)
-            if self.is_design_true(design_k):
+            design_k = case
+            design_type = tuple([self.component_type_dict[component] for component in design_k])
+            if self.is_design_true_final(design_k,design_type):
+                design_k = np.array(design_k)
                 if len(design) == 0:
                     design = design_k
                 else:
                     design = np.vstack((design,design_k))
                 sys_list = np.append(sys_list,self.system_reliability(self.transfer_design(design_k)))
-        best_design,worst_design = design[np.argmax(sys_list)],design[np.argmin(sys_list)]
+            elif self.is_design_true(design_k):
+                print('funtion is design true is in error')
+        try:
+            best_design,worst_design = design[np.argmax(sys_list)],design[np.argmin(sys_list)]
+        except:
+            print('error')
         best_sys,worst_sys = np.max(sys_list),np.min(sys_list)
         return (best_design,best_sys),(worst_design,worst_sys)
     def random_method(self,problem_type=1):
         '''
         输出1w个合法解和时间
+        :return:
+        '''
+        component_type_dict = self.component_type_dict
+        start = time.process_time()
+        # seed = self.seed
+        # np.random.seed(seed)
+        count = 0
+        design = np.array([])
+        while count < 100:
+            # print(count)
+            if problem_type == 1:
+                length = len(self.plist)
+                case = np.arange(1,length+1)
+                np.random.shuffle(case)
+            else:
+                position_length = self.positionnum
+                component_length = len(self.plist)
+                case = np.arange(1,component_length+1)
+                np.random.shuffle(case)
+                case = case[0:position_length]
+            design_k = case
+            design_type = [component_type_dict[component] for component in design_k]
+            if self.is_design_true_final(design_k,tuple(design_type)):
+                design_klist = self.generate_design(design_k,design_type)
+                if len(design) == 0:
+                    design = design_klist
+                else:
+                    design = np.vstack((design,design_klist))
+                count = count + 1
+                # print(count)
+        end = time.process_time()
+        method_time = end - start
+        return design,method_time
+    def random_method2(self,problem_type=1):
+        '''
+        随机100合法解，然后内部交换
         :return:
         '''
         start = time.process_time()
@@ -835,30 +984,45 @@ class Project():
         count = 0
         design = np.array([])
         while count < 5:
-            print(count)
+            # print(count)
             if problem_type == 1:
                 length = len(self.plist)
                 case = np.arange(1,length+1)
                 np.random.shuffle(case)
             else:
-                position_length = len(self.positionnum)
+                position_length = self.positionnum
                 component_length = len(self.plist)
                 case = np.arange(1,component_length+1)
                 np.random.shuffle(case)
                 case = case[0:position_length]
             design_k = case
-            if self.is_design_true(design_k):
+            if self.is_design_true_final(design_k):
                 if len(design) == 0:
                     design = design_k
                 else:
                     design = np.vstack((design,design_k))
                 count = count + 1
-                print(count)
+                # print(count)
         end = time.process_time()
         method_time = end - start
         return design,method_time
-
-
+    def generate_design(self,design,design_type):
+        seed_num = 100
+        design_type = np.array(design_type)
+        design_list = np.zeros([seed_num,len(design)],dtype=int)
+        typenum = self.typenum
+        component_index_dict = self.component_index_dict
+        index_dict = defaultdict(list)
+        for type_index in range(1,typenum+1):
+            index_thistype = np.where(design_type==type_index)[0]#该类型组件在design中的index
+            index_dict[type_index] = index_thistype
+            num_component_select_thistype = len(index_thistype)#design中该类型组件的数量
+            component_avail_thistype = component_index_dict[type_index] #该类型组件的列表
+            for sd in range(seed_num):
+                pre_design = np.random.choice(component_avail_thistype,num_component_select_thistype,replace=False)
+                design_k = design_list[sd]
+                design_k[index_thistype] = np.array(pre_design)
+        return design_list
 class Case():
     def __init__(self):
         '''
@@ -940,11 +1104,11 @@ class Case():
         p3 = np.sort(np.random.random(pnums[2]))
         p_before = np.concatenate((p1, p2, p3), axis=None)
         if type == 1:
-            p = (p_before * 19 + 80) / 100
+            p = (p_before * 19 + 1) / 100  # 0.01 - 0.2
         elif type == 2:
-            p = (p_before * 19 + 1) / 100
+            p = (p_before * 19 + 80) / 100  # 0.8-0.99
         else:
-            p = (p_before * 98 + 1) / 100
+            p = (p_before * 98 + 1) / 100 # 0.01 - 0.99
         return k, pattern, p, region, positionnum, pnums,problem_type
     def get_plist(self,pnums,type):
         '''
@@ -958,11 +1122,11 @@ class Case():
         p3 = np.sort(np.random.random(pnums[2]))
         p_before = np.concatenate((p1, p2, p3), axis=None)
         if type == 1:
-            p = (p_before * 19 + 80) / 100
+            p = (p_before * 19 + 1) / 100  # 0.01 - 0.2
         elif type == 2:
-            p = (p_before * 19 + 1) / 100
+            p = (p_before * 19 + 80) / 100  # 0.8-0.99
         else:
-            p = (p_before * 98 + 1) / 100
+            p = (p_before * 98 + 1) / 100 # 0.01 - 0.99
         return p
     def plot_region(self,region,filepath):
         colorlist = ['r', 'g', 'y']

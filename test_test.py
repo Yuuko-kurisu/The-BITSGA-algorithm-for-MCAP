@@ -57,6 +57,28 @@ for i in range(len(region)):
 plt.show()
 #%%
 import numpy as np
-a = np.arange(2,5)
+import itertools
+from collections import defaultdict
+a = {(1,2):1,(2,3):1}
+a = defaultdict(list)
+a[(1,2)] = 1
+key = (1,1)
+try:
+    boolindex = a[key]
+except:
+    boolindex = 0
+print(boolindex)
+#%%
+b = list(position_dict.values())
+a = itertools.product(*b)
 for i in a:
     print(i)
+#%%
+b = [np.array([1,2]),np.array([2,3]),np.array([])]
+a = itertools.product(*b)
+for i in a:
+    print(i)
+# 解决了，把position dict里面的空数组去掉就行了
+#%%
+np.random.choice()
+
